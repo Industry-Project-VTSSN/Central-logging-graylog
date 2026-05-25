@@ -20,7 +20,7 @@ services:
   # echo "vm.max_map_count=262144" | sudo tee -a /etc/sysctl.conf
   # sudo sysctl -p
   datanode:
-    image: "${DATANODE_IMAGE:-graylog/graylog-datanode:7.1}"
+    image: "${DATANODE_IMAGE:-graylog/graylog-datanode:7.1.2}"
     hostname: "datanode"
     environment:
       GRAYLOG_DATANODE_NODE_ID_FILE: "/var/lib/graylog-datanode/node-id"
@@ -47,7 +47,7 @@ services:
   # Graylog: https://hub.docker.com/r/graylog/graylog-enterprise
   graylog:
     hostname: "server"
-    image: "${GRAYLOG_IMAGE:-graylog/graylog:7.1}"
+    image: "${GRAYLOG_IMAGE:-graylog/graylog:7.1.2}"
     depends_on:
       mongodb:
         condition: "service_started"
@@ -60,15 +60,18 @@ services:
       GRAYLOG_PASSWORD_SECRET: "${GRAYLOG_PASSWORD_SECRET:?Please configure GRAYLOG_PASSWORD_SECRET in the .env file}"
       GRAYLOG_ROOT_PASSWORD_SHA2: "${GRAYLOG_ROOT_PASSWORD_SHA2:?Please configure GRAYLOG_ROOT_PASSWORD_SHA2 in the .env file}"
       GRAYLOG_HTTP_BIND_ADDRESS: "0.0.0.0:9000"
-      GRAYLOG_HTTP_EXTERNAL_URI: "http://localhost:9000/"
+      # GRAYLOG_HTTP_EXTERNAL_URI: "http://localhost:9000/"
+      GRAYLOG_HTTP_EXTERNAL_URI: "http://172.30.252.108:9000/"
       GRAYLOG_MONGODB_URI: "mongodb://mongodb:27017/graylog"
     ports:
-    - "127.0.0.1:5044:5044/tcp"   # Beats
+    # - "127.0.0.1:5044:5044/tcp"   # Beats
+    - "5044:5044/tcp"   # Beats
     - "127.0.0.1:5140:5140/udp"   # Syslog
     - "127.0.0.1:5140:5140/tcp"   # Syslog
     - "127.0.0.1:5555:5555/tcp"   # RAW TCP
     - "127.0.0.1:5555:5555/udp"   # RAW UDP
-    - "127.0.0.1:9000:9000/tcp"   # Server API
+    # - "127.0.0.1:9000:9000/tcp"   # Server API
+    - "9000:9000/tcp"   # Server API
     - "127.0.0.1:12201:12201/tcp" # GELF TCP
     - "127.0.0.1:12201:12201/udp" # GELF UDP
     #- "127.0.0.1:10000:10000/tcp" # Custom TCP port
