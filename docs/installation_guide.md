@@ -195,20 +195,3 @@ To finalize your deployment and begin onboarding data, proceed to the next phase
 * **Access Management (RBAC):** Onboard security personnel with distinct, granular roles instead of sharing the master root account.
 
 
-<!-- 
-
-## Upstream Repository Maintenance
-
-Because we preserved the underlying Git framework during our sparse checkout, updating the system configurations or base images in the future is streamlined.
-
-To update your deployment down the road, navigate to the `central-server` directory and run:
-```bash
-# Pull upstream repository configurations
-git pull
-
-# Rebuild containers and pull updated images
-docker compose up -d --build
-
-# Purge dangling cache images to free up host disk space
-docker image prune -f
-``` -->

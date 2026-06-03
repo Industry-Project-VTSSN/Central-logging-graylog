@@ -158,15 +158,56 @@ Net als bij de firewalls is de integratie van de netwerkapparatuur volledig **ag
 * **SNMP Transport:** Voor de SNMP-traps wordt het **SNMPv2c of SNMPv3 protocol** gebruikt. De switches worden ingesteld om hun traps te sturen naar **UDP poort 162** op de Graylog-server. Graylog activeert hiervoor een specifieke *SNMP Input plugin* die in staat is om de binnenkomende OID-structuren op te vangen en te loggen.
 
 
+### 2.4 Linux-omgeving & Docker-containers
 
-## 2.4 Samenvatting Logbronnen en Protocollen
+Naast de Windows-gebaseerde infrastructuur maken ook diverse Linux-servers en Docker-gebaseerde toepassingen deel uit van de kritieke omgeving binnen vzw VTSSN. Het centraal consolideren van deze logstromen is essentieel voor een integraal security- en troubleshootingoverzicht.
+
+
+
+#### 2.4.1 Linux Systeemlogging (Graylog Sidecar & Filebeat)
+
+Om uniformiteit te garanderen met de Windows-omgeving, wordt op de Linux-servers (zoals Ubuntu Server of Debian) de **Graylog Sidecar** service geïnstalleerd met de **Filebeat** logshipper.
+* **Collectiemethode:** In plaats van te vertrouwen op traditionele, decentrale rsyslog-configuraties, leest Filebeat lokaal de Linux-systeemlogs (zoals `/var/log/auth.log` en `/var/log/syslog`) en applicatielogs uit.
+* **Protocol & Beveiliging:** Het transport van de data tussen de campussen verloopt via het efficiënte en gecomprimeerde **Beats-protocol**. Dit verkeer wordt volledig versleuteld met behulp van **TLS (Transport Layer Security)** via een specifieke Beats-input op de centrale Graylog-server.
+* **Beheer:** De configuratie van Filebeat wordt centraal aangestuurd vanuit de Graylog webinterface, wat het lifecycle management voor de ICT-dienst aanzienlijk vereenvoudigt.
+
+
+
+#### 2.4.2 Docker Container Logging
+
+Voor de gecontaineriseerde applicaties binnen VTSSN is een gestandaardiseerde logstrategie noodzakelijk, aangezien applicatielogs binnen containers standaard vluchtig (*ephemeral*) zijn en verdwijnen zodra een container herstart of wordt verwijderd.
+
+Om dit op te vangen, worden twee scenario's ondersteund binnen de architectuur:
+
+1. **De GELF Log Driver (Aanbevolen voor centrale applicaties):**
+Docker beschikt over een native **Graylog Extended Log Format (GELF)** logging driver. Door de Docker-daemon of specifieke containers (via *Docker Compose*) te configureren met de `gelf`-driver, worden `stdout` en `stderr` stromen direct gestructureerd in JSON-formaat naar een Graylog GELF UDP/TCP input gestuurd. Dit minimaliseert de parsing-overhead in Graylog, omdat metadata zoals de *Container ID*, *Image Name* en *Command* automatisch als aparte velden worden meegeleverd.
+2. **Filebeat / Graylog Sidecar (Voor specifieke applicatielogs):**
+Indien een applicatie binnen een container logs naar specifieke bestanden schrijft (bijvoorbeeld een Nginx-toegangskaart in een *named volume*), kan de **Graylog Sidecar met Filebeat** op de Docker-host worden ingezet. Filebeat monitort in dat geval de logbestanden op de host die gekoppeld zijn aan de persistente volumes van de containers en stuurt deze door naar de centrale architectuur.
+
+#### 2.4.3 Security- en Troubleshootingwaarde
+
+Door de integratie van deze bronnen worden kritieke security-events direct inzichtelijk op de dashboards:
+
+* **Foutieve SSH-inlogpogingen (`auth.log`):** Directe detectie van mogelijke brute-force aanvallen op Linux-servers.
+* **Applicatiefouten (Docker `stderr`):** Snelle troubleshooting bij het crashen of falen van interne schooltoepassingen.
+* **Privilege escalation (`sudo`):** Monitoring van beheerdersacties op het Linux-platform.
+
+
+
+## 2.5 Samenvatting Logbronnen en Protocollen
 
 | Bron Type | Componenten | Protocol / Agent | Standaard Poort | Type Data |
 | --- | --- | --- | --- | --- |
-| **Servers & Hyper-V** | Windows Server, Hyper-V Hosts | Graylog Sidecar + Winlogbeat | `5044` (TCP) | Gestructureerd (JSON / Event ID) |
-| **Firewalls** | WatchGuard, OPNsense | Syslog (Agentless) | `514` of `1514` (UDP) | Semi-gestructureerd (Tekst / Strings) |
+| **Servers & Hyper-V (Windows)** | Windows Server, Hyper-V Hosts | Graylog Sidecar + Winlogbeat | `5044` (TCP) | Gestructureerd (JSON / Event ID) |
+| **Servers (Linux)** | Ubuntu Server, Debian | Graylog Sidecar + Filebeat | `5044` (TCP over TLS) | Gestructureerd / Tekst (Beats-format) |
+| **Applicaties (Docker)** | Gecontaineriseerde applicaties | Docker GELF Logging Driver | `12201` (UDP / TCP) | Gestructureerd (JSON) |
+| **Firewalls** | WatchGuard, OPNsense | Syslog (Agentless) | `514`, `1514` of `6514` (UDP/TLS) | Semi-gestructureerd (Tekst / Strings) |
 | **Netwerk (Syslog)** | HP, Aruba, MikroTik, Ruckus | Syslog (Agentless) | `514` of `1514` (UDP) | Ongestructureerd (Tekst) |
 | **Netwerk (Traps)** | HP, Aruba, MikroTik, Ruckus | SNMP Traps (Agentless) | `162` (UDP) | Gestructureerd (OIDs) |
+
+
+
+
 
 
 
@@ -259,63 +300,207 @@ Voor dit project wordt gekozen voor een **Docker-gebaseerde deployment** op een 
 4. **Isolatie van Data:** Door gebruik te maken van Docker *named volumes* wordt de database-opslag van OpenSearch strikt gescheiden van de applicatielogica, wat voordelen biedt voor de back-up-strategie en opslag-performantieanalyse.
 
 
-## 4. Beantwoording van de Kernvragen
+# 4. Beantwoording van de Kernvragen
 
-Dit is de theoretische kern van je analyse, gebaseerd op de vragen uit de projectfiche.
-
-### 4.1 Efficiënte Centralisatie en Analyse
-
-* Hoe worden logs gecentraliseerd zonder het netwerk te overbelasten?
-
-
-* Welke rol spelen extractors, grok patterns en pipelines bij het structureren van ongestructureerde data?
+Binnen dit project heeft de scholengroep een aantal gerichte vragen geformuleerd om de efficiëntie, meerwaarde en schaalbaarheid van de nieuwe centrale loggingomgeving te waarborgen. In dit hoofdstuk worden deze kernvragen technisch geanalyseerd en beantwoord op basis van de Graylog-architectuur.
 
 
 
-### 4.2 Meerwaarde van Dashboards voor de ICT-dienst
+## 4.1 Hoe kunnen logs efficiënt gecentraliseerd en geanalyseerd worden? 
 
-* Welke specifieke statistieken en KPI's moeten visueel getoond worden om troubleshooting te versnellen?
+Efficiënte centralisatie en analyse vallen of staan met het scheiden van transport, structurering en routering. Om te voorkomen dat het netwerk van de scholengroep overbelast raakt en de IT-dienst verdrinkt in ongestructureerde data, hanteert Graylog een gestroomlijnd proces:
 
+### 4.1.1 Efficiënte Centralisatie (Transport & Ingest)
 
-
-### 4.3 Incidentbeheer via Automatische Waarschuwingen
-
-* Hoe dragen alerts bij aan snellere detectie van verdachte activiteiten of infrastructuurfouten?
+* **Lightweight Shippers:** Voor Windows-omgevingen wordt gebruikgemaakt van Winlogbeat via de Graylog Sidecar. Winlogbeat heeft een minimale resource-footprint (CPU/RAM) en verstuur logs gecomprimeerd via het Beats-protocol naar de server, wat WAN-verkeer tussen de campussen minimaliseert.
 
 
-* Welke notificatiekanalen (e-mail, webhooks, Teams) zijn het meest geschikt?
+* **Agentless Netwerkstreams:** Firewalls en switches pushen hun logs via Syslog direct over UDP naar de server. UDP kent minder overhead dan TCP, wat de netwerkimpact op core-switches minimaliseert.
 
 
 
-### 4.4 Sizing, Schaalbaarheid en Retention Policies
+### 4.1.2 Efficiënte Analyse (Parsing & Pipelines)
 
-* 
-**Storage Sizing:** Berekening van de verwachte data-inname (Events Per Second - EPS) en de impact op de schijfruimte.
+Onbewerkte tekstlogs (zoals syslog van OPNsense of WatchGuard) zijn voor een mens moeilijk doorzoekbaar. Graylog analyseert en structureert deze logs efficiënt via:
 
-
-* 
-**Retention Policies:** Welke retentiestrategie (aantal indexen, rotatie op basis van grootte of tijd) past binnen de performantie- en opslaglimieten van de scholengroep?
-
-
-
-### 4.5 Integratie met Bestaande Monitoringplatformen (Uitbreiding)
-
-* Analyse van hoe Graylog kan samenwerken of integreren met platformen zoals Grafana, Zabbix of Prometheus.
+* **Extractors & Grok Patterns:** Met behulp van Regular Expressions (RegEx) en voorgedefinieerde Grok-patronen filtert Graylog variabelen uit tekstregels. Een ongestructureerde firewall-log wordt automatisch opgeknipt in duidelijke databasevelden zoals `source_ip`, `destination_port` en `action`.
+* **Processing Pipelines:** Dit zijn opeenvolgende regels (rules) waarmee data verrijkt of gemanipuleerd kan worden. Zo kan een pipeline een IP-adres matchen aan een geografische locatie (GeoIP-lookup) of bekende kwaadaardige IP-lijsten (Threat Intelligence Integration), zodat kwaadaardig verkeer direct oplicht in de zoekresultaten.
 
 
 
 
 
-## 5. Security & Privacy Overwegingen
+## 4.2 Welke dashboards bieden de meeste meerwaarde voor de ICT-dienst? 
 
-Beschrijf hoe er rekening wordt gehouden met de beperkingen en wetgeving rondom infrastructuurdata.
+Om de huidige versnippering en het gebrek aan centraal overzicht tegen te gaan, moet de ICT-dienst in één oogopslag de gezondheid en veiligheid van de vier campussen kunnen aflezen. De volgende drie dashboards bieden de grootste operationele meerwaarde:
 
-* **Data-encryptie:** Beveiliging van logs tijdens transport (TLS/SSL voor Syslog en Beats).
-* **Toegangsbeheer (RBAC):** Rollen en rechten binnen Graylog (wie mag welke dashboards en logs inzien).
-* **Privacy (GDPR):** Omgang met privacygevoelige gegevens in logs (bijv. IP-adressen of gebruikersnamen van studenten/leerkrachten).
+### 4.2.1 Dashboard 1: Netwerk Security & Firewall Overzicht
+
+* **Doel:** Direct inzicht in perimeter-dreigingen en netwerkactiviteit.
+* **Kern-widgets:**  Grafiek met het aantal geblokkeerde verbindingspogingen per campus (WatchGuard/OPNsense).
+* Top 10 bron-IP-adressen die geblokkeerd worden (detectie van brute-force of poortscans).
+* Actieve VPN-tunnels en bandbreedte-pieken per locatie.
 
 
 
-## 6. Conclusie & Aanbevelingen
 
-Een samenvatting van de voorgestelde architectuur en de volgende stappen voor de testfase.
+
+### 4.2.2 Dashboard 2: Windows & Hyper-V Infrastructuur Status
+
+* **Doel:** Snelle foutanalyse en capaciteitsbeheer van de serveromgeving.
+* **Kern-widgets:** Tijdlijn met kritieke Windows Event Fouten (Event ID `4625` - Mislukte aanmeldingen).
+* Hyper-V statuswijzigingen (VM's die onverwacht stoppen of migreren).
+* Systeemwaarschuwingen (bijv. diskruimte-tekort of mislukte back-up services).
+
+
+
+### 4.2.3 Dashboard 3: Network Health (SNMP)
+
+* **Doel:** Proactieve monitoring van switches en routers.
+
+
+* **Kern-widgets:** Overzicht van switchpoorten die 'Down' of 'Up' gaan via SNMP traps.
+
+
+* Hardware-status (CPU-belasting, geheugengebruik en temperatuur van HP/Aruba/MikroTik core-switches).
+
+
+
+
+## 4.3 Hoe kunnen automatische waarschuwingen bijdragen aan sneller incidentbeheer?
+
+Binnen de huidige infrastructuur van de scholengroep worden problemen niet altijd snel gedetecteerd omdat logs verspreid zijn en handmatig gecontroleerd moeten worden. Het handmatig doorspitten van gigantische logbestanden tijdens een incident is tijdrovend. Automatische waarschuwingen (Alerts) binnen Graylog lossen dit op door monitoring te transformeren van **reactief** (zoeken naar de oorzaak als het systeem al plat ligt) naar **proactief** (direct signaleren wanneer een drempelwaarde wordt overschreden).
+
+### 4.3.1 Mechanismen voor snellere incidentdetectie
+
+Automatische waarschuwingen dragen op de volgende manieren bij aan een versneld incidentbeheer:
+
+* **Real-time Event Filteren:** Graylog scant binnenkomende logstromen (zoals Syslog en Beats) in real-time. Zodra een logregel aan vooraf gedefinieerde criteria voldoet (bijvoorbeeld een `Critical` of `Emergency` statuscode van een OPNsense firewall), wordt er direct een alarm gegenereerd.
+
+
+* **Drempelwaarde-bewaking (Thresholds):** In plaats van te reageren op een enkele fout, kan Graylog patronen herkennen. Als een Aruba- of HP-switch binnen 1 minuut meer dan 50 SNMP-traps verstuurt over poortfouten (packet loss), activeert Graylog een waarschuwing. Dit voorkomt dat de ICT-dienst overspoeld wordt met losse meldingen, maar wel direct ingrijpt bij escalaties.
+
+
+* **Security Correlatie:** Verdachte activiteiten, zoals brute-force inlogpogingen op Windows-servers of Hyper-V hosts, kunnen direct worden blootgelegd. Een alert kan zo worden ingesteld dat deze afgaat wanneer er binnen 5 minuten meer dan 15 mislukte inlogpogingen (Event ID `4625`) worden geregistreerd.
+
+
+
+### 4.3.2 Directe Notificatiekanalen
+
+Om de reactietijd van de ICT-dienst te minimaliseren, koppelt Graylog waarschuwingen aan automatische notificaties. Hierdoor hoeft de IT-beheerder niet constant naar het Graylog-dashboard te kijken:
+
+* **E-mailnotificaties:** Kritieke serverfouten of schijfruimte-waarschuwingen kunnen direct naar het ticketsysteem of de mailbox van de IT-dienst worden gemaild.
+* **Webhooks (bijv. Microsoft Teams):** Bij dringende infrastructurele problemen of security-incidenten kan Graylog via een webhook een direct bericht pushen in het Teams-kanaal van de netwerkbeheerders, inclusief relevante details zoals de hostnaam en de exacte foutmelding.
+
+
+
+## 4.4 Welke retention policies zijn geschikt voor de scholengroep?
+
+Een *retention policy* (bewaartermijnbeleid) bepaalt hoe lang loggegevens bewaard blijven en wanneer oude gegevens automatisch worden verwijderd of gearchiveerd. Voor vzw VTSSN is het belangrijk om een balans te vinden tussen historische analyse (onderzoek naar incidenten uit het verleden) en de beschikbare opslagcapaciteit en performantie van de monitoringservers.
+
+Omdat de scholengroep beschikt over vier campussen met een grote hoeveelheid netwerk- en serverapparatuur, is een **gelaagde retentiestrategie** het meest geschikt:
+
+### 4.4.1 Hot Storage (Direct doorzoekbaar): 30 dagen
+
+* **Toepassing:** Alle binnenkomende Windows Event Logs, firewall syslog-data en SNMP traps worden opgeslagen in actieve indexen binnen OpenSearch/Elasticsearch.
+
+
+* **Kenmerken:** De data is volledig geïndexeerd en direct binnen enkele milliseconden doorzoekbaar via de Graylog-webinterface en dashboards.
+
+
+* **Verantwoording:** Uit de probleemstelling blijkt dat troubleshooting momenteel complex en tijdrovend is. 30 dagen direct doorzoekbare data is ruim voldoende voor dagelijkse foutanalyses, het oplossen van actuele netwerkproblemen en het controleren van recente security-meldingen.
+
+
+
+### 4.4.2 Warm Storage / Archief (Gecomprimeerd): 90 tot 180 dagen
+
+* **Toepassing:** Zodra logs ouder zijn dan 30 dagen, worden de indexen automatisch door Graylog gesloten (Index Rotation).
+
+
+* **Kenmerken:** De data wordt uit het actieve, dure RAM-geheugen van de database gehaald, gecomprimeerd tot platte bestanden en verplaatst naar goedkopere opslag (bijvoorbeeld een dedicated partitie of netwerkschijf binnen de scholengroep). De data is niet meer direct via dashboards zichtbaar, maar kan bij een historisch (security-)onderzoek binnen enkele minuten worden teruggezet (geïmporteerd).
+
+
+* **Verantwoording:** Dit lost de noodzaak voor historische analyse op zonder dat de centrale database (OpenSearch) traag wordt of vastloopt door een overschot aan data.
+
+
+
+### 4.4.3 Definitieve Verwijdering (Purge): Na 180 dagen
+
+* **Toepassing:** Logs die de maximale bewaartermijn van bijvoorbeeld een half jaar hebben overschreden, worden automatisch en definitief van de harde schijf gewist.
+* **Verantwoording:** Dit beschermt de schaalbaarheid van de opslagomgeving en zorgt ervoor dat de scholengroep voldoet aan de wetgeving rondom dataminimalisatie en privacy (GDPR), aangezien logs gebruikersnamen of IP-adressen van studenten en medewerkers kunnen bevatten.
+
+## 4.5 Welke impact hebben logretentie en opslag op performantie en schaalbaarheid? 
+
+Logbestanden kunnen exponentieel groeien, zeker in een omgeving met vier campussen en honderden netwerkcomponenten. Dit heeft directe gevolgen voor de systeemperformantie:
+
+* **I/O-Performance (Schrijfsnelheid):** OpenSearch/Elasticsearch voert bij elke binnenkomende logregel schrijf- en indexeeracties uit. Als de schijven (bij voorkeur SSD/NVMe) de hoeveelheid Events Per Second (EPS) niet kunnen bijhouden, ontstaat er een wachtrij (buffer) en vertraagt het hele platform.
+
+
+* **Geheugenbelasting (RAM):** De zoekmachine houdt index-structuren in het RAM-geheugen om snelle zoekresultaten te garanderen. Hoe meer data en hoe groter de retentieperiode, hoe meer RAM OpenSearch vereist. Te weinig RAM leidt tot trage dashboards en timeouts.
+
+
+* **Schaalbaarheid via Index Sets:** Om de performantie hoog te houden, deelt Graylog data op in *Index Sets* met een rotatiestrategie (bijv. roteer index zodra deze 20 GB groot is, of elke 7 dagen). Hierdoor hoeft de zoekmachine nooit in één gigantisch bestand te zoeken, wat de schaalbaarheid optimaliseert bij groei van de scholengroep.
+
+
+
+
+## 4.6 Hoe kunnen bestaande monitoringplatformen geïntegreerd worden binnen een centrale loggingomgeving? 
+
+Graylog focust op *logs* (gebeurtenissen uit het verleden), terwijl platformen zoals Zabbix of Prometheus focussen op *metrieken* (real-time status zoals CPU % of uptime). Integratie biedt een compleet 360-graden overzicht:
+
+* **Zabbix Integratie:** Zabbix kan via API-koppelingen of scripts alerts doorsturen naar Graylog wanneer een server offline gaat. Omgekeerd kan Graylog een alert triggeren (bijv. "Firewall CPU > 90% op basis van syslog") en dit als een event inschieten in Zabbix, zodat de IT-dienst één centraal dashboard behoudt voor incidenten.
+
+
+* **Grafana Integratie:** Grafana kan OpenSearch/Elasticsearch rechtstreeks als databron (Data Source) aanspreken. Hierdoor kan de ICT-dienst de rijke logdata uit Graylog combineren met metrieken uit Prometheus of Zabbix in één overkoepelend, esthetisch Grafana-dashboard.
+
+
+
+
+
+# 5. Security & Privacy Overwegingen
+
+Centrale logbestanden bevatten een schat aan gevoelige informatie over de IT-infrastructuur, netwerkstromen en gebruikersactiviteiten van vzw VTSSN. Het beveiligen van deze centrale loggingomgeving en het respecteren van de privacywetgeving is daarom een kritisch onderdeel van dit project. Hieronder wordt beschreven hoe security en privacy gewaarborgd worden binnen de voorgestelde Graylog-architectuur.
+
+## 5.1 Data-encryptie (Security in Transit & Rest)
+
+Logs mogen tijdens het transport over het netwerk tussen de campussen niet leesbaar zijn voor onbevoegden, en moeten ook op de centrale server veilig worden opgeslagen.
+
+* **Beveiliging van Beats-verkeer (Windows/Hyper-V):** Het transport van Windows Event Logs via Winlogbeat naar de Graylog-server kan volledig worden versleuteld met behulp van **TLS (Transport Layer Security)**. Hierbij wordt een TLS-certificaat op de Graylog-input geïnstalleerd, waardoor de Sidecar-agents de data via een beveiligde, versleutelde TCP-verbinding versturen.
+* **Beveiliging van Syslog-verkeer (Firewalls & Switches):** Traditioneel Syslog-verkeer over UDP (poort 514) is onversleuteld. Waar mogelijk (bijvoorbeeld bij moderne firewalls zoals OPNsense of WatchGuard) kan worden overgestapt op **Syslog over TLS (TCP poort 6514)**. Voor legacy switches die dit niet ondersteunen, moet worden gewaarborgd dat dit onversleutelde verkeer uitsluitend binnen een afgeschermd en beveiligd beheer-VLAN (Management VLAN) getransporteerd wordt.
+* **Encryption at Rest:** De onderliggende database (OpenSearch/Elasticsearch) kan zo geconfigureerd worden dat de opgeslagen indexbestanden op de harde schijf (of Docker storage volumes) versleuteld zijn. Dit voorkomt dat logs direct leesbaar zijn als de fysieke of virtuele schijven in verkeerde handen vallen.
+
+
+
+## 5.2 Toegangsbeheer (Role-Based Access Control - RBAC)
+
+Niet elke medewerker binnen de scholengroep hoeft toegang te hebben tot alle logbestanden. Graylog beschikt over een ingebouwd RBAC-systeem waarmee rollen en rechten strikt gescheiden kunnen worden:
+
+* **Strikte scheiding van rollen:**  **Beheerders (Administrators):** Hebben volledige rechten over het platform. Zij kunnen inputs configureren, indexen beheren en pipelines aanmaken.
+* **ICT-Support / Helpdesk:** Krijgen een rol met beperkte rechten (Read-Only). Zij kunnen uitsluitend specifieke dashboards inzien en logs doorzoeken voor troubleshooting (bijvoorbeeld kijken waarom een account van een leerkracht geblokkeerd is), maar kunnen geen configuratiewijzigingen doorvoeren.
+
+
+* **Gekoppelde Streams en Dashboards:** Rechten kunnen in Graylog per 'Stream' worden toegekend. Zo kan de netwerkbeheerder exclusief toegang krijgen tot de WatchGuard en OPNsense firewall-streams, terwijl een systeembeheerder alleen toegang krijgt tot de Windows Server-logs.
+
+
+
+## 5.3 Privacy & Algemene Verordening Gegevensbescherming (GDPR)
+
+Aangezien de scholengroep persoonsgegevens verwerkt van zowel studenten als leerkrachten, moeten de verzamelde logs voldoen aan de GDPR-wetgeving. Systeemlogs bevatten immers vaak herleidbare persoonsgegevens, zoals gebruikersnamen (`vtssn\voornaam.achternaam`) en IP-adressen.
+
+* **Dataminimalisatie:** Er worden uitsluitend logs verzameld die noodzakelijk zijn voor troubleshooting, infrastructuurmonitoring en basis security monitoring. Logs van applicaties die puur persoonlijke of niet-relevante data bevatten, worden op voorhand uitgesloten van centralisatie.
+* **Anonymisering en Pseudonimisering via Pipelines:** Indien de wetgeving of het interne beleid dit vereist, kunnen Graylog processing pipelines worden ingezet om gevoelige velden te maskeren. Zo kan het laatste octet van een IP-adres van een studenten-device automatisch worden geanonimiseerd (bijv. `192.168.10.45` wordt `192.168.10.0`), of kunnen specifieke privacygevoelige strings uit de logtekst worden gefilterd voordat ze geïndexeerd worden in OpenSearch.
+* **Geautomatiseerde Retentie als Privacywaarborg:** Zoals vastgelegd in de *retention policies*, worden logs na een vooraf gedefinieerde termijn (bijvoorbeeld 30 dagen hot en maximaal 180 dagen in archief) definitief en onherroepelijk gewist. Dit zorgt ervoor dat data niet langer dan noodzakelijk bewaard blijft, wat een harde eis is binnen de GDPR.
+* **Audit Logging binnen Graylog:** Graylog houdt zelf een intern logboek (Internal Audit Log) bij. Hierin wordt exact geregistreerd welke IT-beheerder op welk moment welke zoekopdracht heeft uitgevoerd. Dit voorkomt misbruik van het platform en garandeert dat het inzien van logs altijd traceerbaar is.
+
+
+
+
+# 6. Conclusie
+In dit afsluitende hoofdstuk wordt de voorgestelde architectuur samengevat en gewaardeerd op basis van de projectdoelstellingen.
+## 6.1 Conclusie van de voorgestelde architectuur
+
+De huidige versnippering van logs en monitoringgegevens over verschillende platformen binnen vzw VTSSN maakt troubleshooting complex en vertraagt de detectie van netwerk- en security-incidenten. Met de inrichting van een centraal Graylog-platform wordt een robuuste, schaalbare en toekomstbestendige oplossing voorgesteld om deze operationele knelpunten efficiënt op te lossen.
+
+De gekozen architectuur rust op een Docker-gebaseerde deployment van de centraliserende Graylog-stack. Deze opzet minimaliseert de resource-footprint op de campus en garandeert een snelle en reproduceerbare uitrol via containerisatie. Door een gelaagde aanpak te hanteren—waarbij Windows- en Hyper-V hosts via een lichtgewicht Graylog Sidecar (Winlogbeat) worden uitgelezen, en netwerkcomponenten en firewalls agentless via Syslog en SNMP traps communiceren—wordt de impact op de bandbreedte tussen de vier campussen tot een minimum beperkt.
+
+Dankzij de gedefinieerde retentieperioden (30 dagen hot storage en tot 180 dagen gecomprimeerd archief), de implementatie van Role-Based Access Control (RBAC) en data-encryptie via TLS, voldoet het platform volledig aan de wetgeving rondom dataminimalisatie en privacy (GDPR), zonder in te boeten op de vereiste historische analysecapaciteit van de ICT-dienst.
