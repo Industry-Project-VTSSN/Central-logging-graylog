@@ -66,8 +66,10 @@ services:
     ports:
     # - "127.0.0.1:5044:5044/tcp"   # Beats
     - "5044:5044/tcp"   # Beats
-    - "127.0.0.1:5140:5140/udp"   # Syslog
-    - "127.0.0.1:5140:5140/tcp"   # Syslog
+    # - "127.0.0.1:5140:5140/udp"   # Syslog
+    # - "127.0.0.1:5140:5140/tcp"   # Syslog
+    - "514:5140/udp"   # Syslog
+    - "514:5140/tcp"   # Syslog
     - "127.0.0.1:5555:5555/tcp"   # RAW TCP
     - "127.0.0.1:5555:5555/udp"   # RAW UDP
     # - "127.0.0.1:9000:9000/tcp"   # Server API
