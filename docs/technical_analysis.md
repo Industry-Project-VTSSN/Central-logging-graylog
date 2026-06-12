@@ -4,14 +4,6 @@
 
 **Project:** vzw Vrije Technische Scholen Sint-Niklaas (VTSSN) 
 
-**Auteurs:** Jonah & Thomas
-
-**Datum:** Mei 2026
-
-**Versie:** 0.1 (Concept)
-
-
-
 ## 1. Inleiding & Situering
 
 ### 1.1 Doelstelling van het project
