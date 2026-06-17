@@ -131,7 +131,7 @@ De interne netwerkinfrastructuur op en tussen de locaties bestaat uit componente
 
 Netwerkapparatuur levert gegevens aan via syslog om zowel historische gebeurtenissen als statuswijzigingen op te vangen:
 
-1. **Syslog-data:** Tekstgebaseerde meldingen over gebeurtenissen die al hebben plaatsgevonden (bijv. een administrator die inlogt op de switch-CLI, of een configuratiewijziging).
+* **Syslog-data:** Tekstgebaseerde meldingen over gebeurtenissen die al hebben plaatsgevonden (bijv. een administrator die inlogt op de switch-CLI, of een configuratiewijziging).
 
 
 
@@ -142,49 +142,11 @@ Net als bij de firewalls is de integratie van de netwerkapparatuur volledig **ag
 * **Syslog Transport:** De HP, Aruba, MikroTik en Ruckus apparaten worden geconfigureerd om hun standaard syslog-output te sturen naar een Syslog UDP-input op de Graylog-server.
 
 
-### 2.4 Linux-omgeving & Docker-containers
-
-Naast de Windows-gebaseerde infrastructuur maken ook diverse Linux-servers en Docker-gebaseerde toepassingen deel uit van de kritieke omgeving binnen vzw VTSSN. Het centraal consolideren van deze logstromen is essentieel voor een integraal security- en troubleshootingoverzicht.
-
-
-
-#### 2.4.1 Linux Systeemlogging (Graylog Sidecar & Filebeat)
-
-Om uniformiteit te garanderen met de Windows-omgeving, wordt op de Linux-servers (zoals Ubuntu Server of Debian) de **Graylog Sidecar** service geïnstalleerd met de **Filebeat** logshipper.
-* **Collectiemethode:** In plaats van te vertrouwen op traditionele, decentrale rsyslog-configuraties, leest Filebeat lokaal de Linux-systeemlogs (zoals `/var/log/auth.log` en `/var/log/syslog`) en applicatielogs uit.
-* **Protocol & Beveiliging:** Het transport van de data tussen de campussen verloopt via het efficiënte en gecomprimeerde **Beats-protocol**. Dit verkeer wordt volledig versleuteld met behulp van **TLS (Transport Layer Security)** via een specifieke Beats-input op de centrale Graylog-server.
-* **Beheer:** De configuratie van Filebeat wordt centraal aangestuurd vanuit de Graylog webinterface, wat het lifecycle management voor de ICT-dienst aanzienlijk vereenvoudigt.
-
-
-
-#### 2.4.2 Docker Container Logging
-
-Voor de gecontaineriseerde applicaties binnen VTSSN is een gestandaardiseerde logstrategie noodzakelijk, aangezien applicatielogs binnen containers standaard vluchtig (*ephemeral*) zijn en verdwijnen zodra een container herstart of wordt verwijderd.
-
-Om dit op te vangen, worden twee scenario's ondersteund binnen de architectuur:
-
-1. **De GELF Log Driver (Aanbevolen voor centrale applicaties):**
-Docker beschikt over een native **Graylog Extended Log Format (GELF)** logging driver. Door de Docker-daemon of specifieke containers (via *Docker Compose*) te configureren met de `gelf`-driver, worden `stdout` en `stderr` stromen direct gestructureerd in JSON-formaat naar een Graylog GELF UDP/TCP input gestuurd. Dit minimaliseert de parsing-overhead in Graylog, omdat metadata zoals de *Container ID*, *Image Name* en *Command* automatisch als aparte velden worden meegeleverd.
-2. **Filebeat / Graylog Sidecar (Voor specifieke applicatielogs):**
-Indien een applicatie binnen een container logs naar specifieke bestanden schrijft (bijvoorbeeld een Nginx-toegangskaart in een *named volume*), kan de **Graylog Sidecar met Filebeat** op de Docker-host worden ingezet. Filebeat monitort in dat geval de logbestanden op de host die gekoppeld zijn aan de persistente volumes van de containers en stuurt deze door naar de centrale architectuur.
-
-#### 2.4.3 Security- en Troubleshootingwaarde
-
-Door de integratie van deze bronnen worden kritieke security-events direct inzichtelijk op de dashboards:
-
-* **Foutieve SSH-inlogpogingen (`auth.log`):** Directe detectie van mogelijke brute-force aanvallen op Linux-servers.
-* **Applicatiefouten (Docker `stderr`):** Snelle troubleshooting bij het crashen of falen van interne schooltoepassingen.
-* **Privilege escalation (`sudo`):** Monitoring van beheerdersacties op het Linux-platform.
-
-
-
-## 2.5 Samenvatting Logbronnen en Protocollen
+## 2.4 Samenvatting Logbronnen en Protocollen
 
 | Bron Type | Componenten | Protocol / Agent | Standaard Poort | Type Data |
 | --- | --- | --- | --- | --- |
 | **Servers & Hyper-V (Windows)** | Windows Server, Hyper-V Hosts, Graylog client VM/server | Windows Event Forwarding (WEF) + Subscription + Winlogbeat | `5044` (TCP) | Gestructureerd (JSON / Event ID) |
-| **Servers (Linux)** | Ubuntu Server, Debian | Graylog Sidecar + Filebeat | `5044` (TCP over TLS) | Gestructureerd / Tekst (Beats-format) |
-| **Applicaties (Docker)** | Gecontaineriseerde applicaties | Docker GELF Logging Driver | `12201` (UDP / TCP) | Gestructureerd (JSON) |
 | **Firewalls** | WatchGuard, OPNsense | Syslog (Agentless) | `514`, `1514` of `6514` (UDP/TLS) | Semi-gestructureerd (Tekst / Strings) |
 | **Netwerk (Syslog)** | HP, Aruba, MikroTik, Ruckus | Syslog (Agentless) | `514` of `1514` (UDP) | Ongestructureerd (Tekst) |
 
