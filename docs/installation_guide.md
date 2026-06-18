@@ -1,4 +1,3 @@
-
 # Graylog Central Server Installation & Configuration Guide
 
 This guide provides a step-by-step walkthrough for deploying the Graylog Central Server using a Git sparse checkout and Docker Compose. This method ensures an efficient footprint by downloading only the required deployment directory while retaining upstream Git tracking for seamless updates.

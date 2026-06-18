@@ -4,14 +4,6 @@
 
 **Project:** vzw Vrije Technische Scholen Sint-Niklaas (VTSSN) 
 
-**Auteurs:** Jonah & Thomas
-
-**Datum:** Mei 2026
-
-**Versie:** 0.1 (Concept)
-
-
-
 ## 1. Inleiding & Situering
 
 ### 1.1 Doelstelling van het project
@@ -38,13 +30,9 @@ Hierbij ligt de focus op de volgende kerngebieden:
 * **Automatische waarschuwingen:** Het opzetten van alerts en notificaties om direct te kunnen schakelen bij incidenten.
 
 
-* **Integratie:** Het onderzoeken van koppelingsmogelijkheden met de reeds bestaande monitoringplatformen binnen de scholengroep.
-
-
-
 ### 1.2 Probleemstelling (Huidige situatie)
 
-vzw Vrije Technische Scholen Sint-Niklaas (VTSSN) beheert een omvangrijke en heterogene ICT-infrastructuur die verspreid is over vier verschillende campussen op drie locaties. Binnen deze netwerken is een grote variëteit aan kritieke systemen actief, waaronder Hyper-V Windows Server-omgevingen, Linux-servers, Docker-applicaties en een diverse netwerk- en security-omgeving bestaande uit WatchGuard firewalls, OPNsense, HP, Aruba, MikroTik en Ruckus apparatuur.
+Vzw Vrije Technische Scholen Sint-Niklaas (VTSSN) beheert een omvangrijke en heterogene ICT-infrastructuur die verspreid is over vier verschillende campussen op drie locaties. Binnen deze netwerken is een grote variëteit aan kritieke systemen actief, waaronder Hyper-V Windows Server-omgevingen en een diverse netwerk- en security-omgeving bestaande uit WatchGuard firewalls, OPNsense, HP, Aruba, MikroTik en Ruckus apparatuur.
 
 Al deze verschillende systemen en netwerkcomponenten genereren dagelijks enorme hoeveelheden data, zoals Windows Event Logs en sysloggegevens. In de huidige situatie zijn al deze logs en monitoringgegevens echter volledig gefragmenteerd en verspreid over de individuele platformen en apparaten.
 
@@ -100,13 +88,15 @@ Windows-systemen slaan logs op in een binair formaat (`.evtx`). Deze logs zijn g
 
 ### 2.1.2 Collectiemethode & Protocol
 
-Omdat Graylog native geen binaire `.evtx`-bestanden kan inlezen via het netwerk, wordt er gebruikgemaakt van een agent-gebaseerde aanpak:
+Omdat Graylog native geen binaire `.evtx`-bestanden kan inlezen via het netwerk, wordt er voor de Hyper-V-omgeving gebruikgemaakt van een centrale Windows Event Forwarding (WEF)-architectuur:
 
-* **Graylog Sidecar & Winlogbeat:** Op de Windows Servers en Hyper-V hosts wordt de *Graylog Sidecar* service geïnstalleerd. Deze beheert de open-source logshipper *Winlogbeat*.
+* **Hyper-V naar collector:** De Hyper-V hosts sturen hun relevante Windows- en Hyper-V-events via **Windows Event Forwarding (WEF)** naar een centrale **Graylog client VM/server** die fungeert als event collector.
 
+* **Subscription & Winlogbeat:** Op deze Graylog client VM/server wordt een **subscription** geconfigureerd die de binnenkomende events doorgeeft aan **Winlogbeat**.
 
-* **Protocol:** Winlogbeat leest de binaire Windows-events lokaal uit, converteert deze naar een gestructureerd JSON-formaat en transporteert ze via het **Beats-protocol** (over TCP, standaard poort `5044`) naar de centrale Graylog-server.
-* **Service Account:** Voor de authenticatie en het uitlezen van de logs op de servers wordt het door de IT-dienst aangeleverde `svc_graylog_winlog` account geconfigureerd, dat beschikt over de noodzakelijke read-only rechten.
+* **Protocol:** Winlogbeat leest de ontvangen events lokaal uit, zet deze om naar een gestructureerd JSON-formaat en transporteert ze via het **Beats-protocol** (over TCP, standaard poort `5044`) naar de centrale Graylog-server.
+
+* **Service Account:** Voor de authenticatie en het uitlezen van de logs op de collector wordt het door de IT-dienst aangeleverde `svc_graylog_winlog` account geconfigureerd, dat beschikt over de noodzakelijke read-only rechten.
 
 
 ## 2.2 Netwerk- en Securityinfrastructuur (Firewalls)
@@ -139,12 +129,9 @@ De interne netwerkinfrastructuur op en tussen de locaties bestaat uit componente
 
 ### 2.3.1 Log-type & Structuur
 
-Netwerkapparatuur levert gegevens aan via twee verschillende mechanismen om zowel historische gebeurtenissen als proactieve statuswijzigingen op te vangen:
+Netwerkapparatuur levert gegevens aan via syslog om zowel historische gebeurtenissen als statuswijzigingen op te vangen:
 
-1. **Syslog-data:** Tekstgebaseerde meldingen over gebeurtenissen die al hebben plaatsgevonden (bijv. een administrator die inlogt op de switch-CLI, of een configuratiewijziging).
-
-
-2. **SNMP Traps:** Asynchrone waarschuwingen die door de hardware *direct* worden verstuurd op het moment dat een specifieke drempelwaarde wordt overschreden of een kritiek event plaatsvindt (bijv. een netwerkpoort die 'down' gaat, een oververhitting van de switch, of een te hoge CPU-belasting). SNMP-data is opgebouwd rondom **OIDs (Object Identifiers)** die vertaald moeten worden aan de hand van MIB-bestanden.
+* **Syslog-data:** Tekstgebaseerde meldingen over gebeurtenissen die al hebben plaatsgevonden (bijv. een administrator die inlogt op de switch-CLI, of een configuratiewijziging).
 
 
 
@@ -155,55 +142,13 @@ Net als bij de firewalls is de integratie van de netwerkapparatuur volledig **ag
 * **Syslog Transport:** De HP, Aruba, MikroTik en Ruckus apparaten worden geconfigureerd om hun standaard syslog-output te sturen naar een Syslog UDP-input op de Graylog-server.
 
 
-* **SNMP Transport:** Voor de SNMP-traps wordt het **SNMPv2c of SNMPv3 protocol** gebruikt. De switches worden ingesteld om hun traps te sturen naar **UDP poort 162** op de Graylog-server. Graylog activeert hiervoor een specifieke *SNMP Input plugin* die in staat is om de binnenkomende OID-structuren op te vangen en te loggen.
-
-
-### 2.4 Linux-omgeving & Docker-containers
-
-Naast de Windows-gebaseerde infrastructuur maken ook diverse Linux-servers en Docker-gebaseerde toepassingen deel uit van de kritieke omgeving binnen vzw VTSSN. Het centraal consolideren van deze logstromen is essentieel voor een integraal security- en troubleshootingoverzicht.
-
-
-
-#### 2.4.1 Linux Systeemlogging (Graylog Sidecar & Filebeat)
-
-Om uniformiteit te garanderen met de Windows-omgeving, wordt op de Linux-servers (zoals Ubuntu Server of Debian) de **Graylog Sidecar** service geïnstalleerd met de **Filebeat** logshipper.
-* **Collectiemethode:** In plaats van te vertrouwen op traditionele, decentrale rsyslog-configuraties, leest Filebeat lokaal de Linux-systeemlogs (zoals `/var/log/auth.log` en `/var/log/syslog`) en applicatielogs uit.
-* **Protocol & Beveiliging:** Het transport van de data tussen de campussen verloopt via het efficiënte en gecomprimeerde **Beats-protocol**. Dit verkeer wordt volledig versleuteld met behulp van **TLS (Transport Layer Security)** via een specifieke Beats-input op de centrale Graylog-server.
-* **Beheer:** De configuratie van Filebeat wordt centraal aangestuurd vanuit de Graylog webinterface, wat het lifecycle management voor de ICT-dienst aanzienlijk vereenvoudigt.
-
-
-
-#### 2.4.2 Docker Container Logging
-
-Voor de gecontaineriseerde applicaties binnen VTSSN is een gestandaardiseerde logstrategie noodzakelijk, aangezien applicatielogs binnen containers standaard vluchtig (*ephemeral*) zijn en verdwijnen zodra een container herstart of wordt verwijderd.
-
-Om dit op te vangen, worden twee scenario's ondersteund binnen de architectuur:
-
-1. **De GELF Log Driver (Aanbevolen voor centrale applicaties):**
-Docker beschikt over een native **Graylog Extended Log Format (GELF)** logging driver. Door de Docker-daemon of specifieke containers (via *Docker Compose*) te configureren met de `gelf`-driver, worden `stdout` en `stderr` stromen direct gestructureerd in JSON-formaat naar een Graylog GELF UDP/TCP input gestuurd. Dit minimaliseert de parsing-overhead in Graylog, omdat metadata zoals de *Container ID*, *Image Name* en *Command* automatisch als aparte velden worden meegeleverd.
-2. **Filebeat / Graylog Sidecar (Voor specifieke applicatielogs):**
-Indien een applicatie binnen een container logs naar specifieke bestanden schrijft (bijvoorbeeld een Nginx-toegangskaart in een *named volume*), kan de **Graylog Sidecar met Filebeat** op de Docker-host worden ingezet. Filebeat monitort in dat geval de logbestanden op de host die gekoppeld zijn aan de persistente volumes van de containers en stuurt deze door naar de centrale architectuur.
-
-#### 2.4.3 Security- en Troubleshootingwaarde
-
-Door de integratie van deze bronnen worden kritieke security-events direct inzichtelijk op de dashboards:
-
-* **Foutieve SSH-inlogpogingen (`auth.log`):** Directe detectie van mogelijke brute-force aanvallen op Linux-servers.
-* **Applicatiefouten (Docker `stderr`):** Snelle troubleshooting bij het crashen of falen van interne schooltoepassingen.
-* **Privilege escalation (`sudo`):** Monitoring van beheerdersacties op het Linux-platform.
-
-
-
-## 2.5 Samenvatting Logbronnen en Protocollen
+## 2.4 Samenvatting Logbronnen en Protocollen
 
 | Bron Type | Componenten | Protocol / Agent | Standaard Poort | Type Data |
 | --- | --- | --- | --- | --- |
-| **Servers & Hyper-V (Windows)** | Windows Server, Hyper-V Hosts | Graylog Sidecar + Winlogbeat | `5044` (TCP) | Gestructureerd (JSON / Event ID) |
-| **Servers (Linux)** | Ubuntu Server, Debian | Graylog Sidecar + Filebeat | `5044` (TCP over TLS) | Gestructureerd / Tekst (Beats-format) |
-| **Applicaties (Docker)** | Gecontaineriseerde applicaties | Docker GELF Logging Driver | `12201` (UDP / TCP) | Gestructureerd (JSON) |
+| **Servers & Hyper-V (Windows)** | Windows Server, Hyper-V Hosts, Graylog client VM/server | Windows Event Forwarding (WEF) + Subscription + Winlogbeat | `5044` (TCP) | Gestructureerd (JSON / Event ID) |
 | **Firewalls** | WatchGuard, OPNsense | Syslog (Agentless) | `514`, `1514` of `6514` (UDP/TLS) | Semi-gestructureerd (Tekst / Strings) |
 | **Netwerk (Syslog)** | HP, Aruba, MikroTik, Ruckus | Syslog (Agentless) | `514` of `1514` (UDP) | Ongestructureerd (Tekst) |
-| **Netwerk (Traps)** | HP, Aruba, MikroTik, Ruckus | SNMP Traps (Agentless) | `162` (UDP) | Gestructureerd (OIDs) |
 
 
 
@@ -222,7 +167,7 @@ Om een betrouwbare en schaalbare loggingomgeving te realiseren, is een goed door
 De centrale architectuur rust op drie softwarecomponenten die elk een specifieke taak vervullen in de verwerking, opslag en het beheer van loggegevens:
 
 ```
-   [ Logbronnen: Beats / Syslog / SNMP ]
+   [ Logbronnen: Beats / Syslog ]
                      │
                      ▼
          ┌───────────────────────┐
@@ -354,12 +299,12 @@ Om de huidige versnippering en het gebrek aan centraal overzicht tegen te gaan, 
 
 
 
-### 4.2.3 Dashboard 3: Network Health (SNMP)
+### 4.2.3 Dashboard 3: Network Health
 
 * **Doel:** Proactieve monitoring van switches en routers.
 
 
-* **Kern-widgets:** Overzicht van switchpoorten die 'Down' of 'Up' gaan via SNMP traps.
+* **Kern-widgets:** Overzicht van switchpoorten die 'Down' of 'Up' gaan en van andere relevante statuswijzigingen binnen de netwerkapparatuur.
 
 
 * Hardware-status (CPU-belasting, geheugengebruik en temperatuur van HP/Aruba/MikroTik core-switches).
@@ -378,7 +323,7 @@ Automatische waarschuwingen dragen op de volgende manieren bij aan een versneld 
 * **Real-time Event Filteren:** Graylog scant binnenkomende logstromen (zoals Syslog en Beats) in real-time. Zodra een logregel aan vooraf gedefinieerde criteria voldoet (bijvoorbeeld een `Critical` of `Emergency` statuscode van een OPNsense firewall), wordt er direct een alarm gegenereerd.
 
 
-* **Drempelwaarde-bewaking (Thresholds):** In plaats van te reageren op een enkele fout, kan Graylog patronen herkennen. Als een Aruba- of HP-switch binnen 1 minuut meer dan 50 SNMP-traps verstuurt over poortfouten (packet loss), activeert Graylog een waarschuwing. Dit voorkomt dat de ICT-dienst overspoeld wordt met losse meldingen, maar wel direct ingrijpt bij escalaties.
+* **Drempelwaarde-bewaking (Thresholds):** In plaats van te reageren op een enkele fout, kan Graylog patronen herkennen. Als een Aruba- of HP-switch binnen 1 minuut een reeks afwijkende syslog-events verstuurt over poortfouten of linkflaps, activeert Graylog een waarschuwing. Dit voorkomt dat de ICT-dienst overspoeld wordt met losse meldingen, maar wel direct ingrijpt bij escalaties.
 
 
 * **Security Correlatie:** Verdachte activiteiten, zoals brute-force inlogpogingen op Windows-servers of Hyper-V hosts, kunnen direct worden blootgelegd. Een alert kan zo worden ingesteld dat deze afgaat wanneer er binnen 5 minuten meer dan 15 mislukte inlogpogingen (Event ID `4625`) worden geregistreerd.
@@ -402,7 +347,7 @@ Omdat de scholengroep beschikt over vier campussen met een grote hoeveelheid net
 
 ### 4.4.1 Hot Storage (Direct doorzoekbaar): 30 dagen
 
-* **Toepassing:** Alle binnenkomende Windows Event Logs, firewall syslog-data en SNMP traps worden opgeslagen in actieve indexen binnen OpenSearch/Elasticsearch.
+* **Toepassing:** Alle binnenkomende Windows Event Logs, firewall syslog-data en netwerk syslog-data worden opgeslagen in actieve indexen binnen OpenSearch/Elasticsearch.
 
 
 * **Kenmerken:** De data is volledig geïndexeerd en direct binnen enkele milliseconden doorzoekbaar via de Graylog-webinterface en dashboards.
@@ -501,6 +446,6 @@ In dit afsluitende hoofdstuk wordt de voorgestelde architectuur samengevat en ge
 
 De huidige versnippering van logs en monitoringgegevens over verschillende platformen binnen vzw VTSSN maakt troubleshooting complex en vertraagt de detectie van netwerk- en security-incidenten. Met de inrichting van een centraal Graylog-platform wordt een robuuste, schaalbare en toekomstbestendige oplossing voorgesteld om deze operationele knelpunten efficiënt op te lossen.
 
-De gekozen architectuur rust op een Docker-gebaseerde deployment van de centraliserende Graylog-stack. Deze opzet minimaliseert de resource-footprint op de campus en garandeert een snelle en reproduceerbare uitrol via containerisatie. Door een gelaagde aanpak te hanteren—waarbij Windows- en Hyper-V hosts via een lichtgewicht Graylog Sidecar (Winlogbeat) worden uitgelezen, en netwerkcomponenten en firewalls agentless via Syslog en SNMP traps communiceren—wordt de impact op de bandbreedte tussen de vier campussen tot een minimum beperkt.
+De gekozen architectuur rust op een Docker-gebaseerde deployment van de centraliserende Graylog-stack. Deze opzet minimaliseert de resource-footprint op de campus en garandeert een snelle en reproduceerbare uitrol via containerisatie. Door een gelaagde aanpak te hanteren—waarbij Windows- en Hyper-V hosts via Windows Event Forwarding en Winlogbeat worden verzameld, en netwerkcomponenten en firewalls agentless via Syslog communiceren—wordt de impact op de bandbreedte tussen de vier campussen tot een minimum beperkt.
 
 Dankzij de gedefinieerde retentieperioden (30 dagen hot storage en tot 180 dagen gecomprimeerd archief), de implementatie van Role-Based Access Control (RBAC) en data-encryptie via TLS, voldoet het platform volledig aan de wetgeving rondom dataminimalisatie en privacy (GDPR), zonder in te boeten op de vereiste historische analysecapaciteit van de ICT-dienst.

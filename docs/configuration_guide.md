@@ -2,7 +2,7 @@
 
 This guide covers the foundational configuration steps required immediately after a successful deployment. It details how to ingest your first streams of data, manage log storage lifecycle policies, and establish structured access controls.
 
----
+
 
 > ⚠️ **Prerequisite:** Before proceeding with this guide, ensure you have successfully completed the [Installation & Configuration Guide](https://www.google.com/search?q=./installation_guide.md). You must have a fully functional Graylog Central Server running, your internal data node certificate authority established, and administrative web access available at `http://<DOCKER_HOST_IP_OR_DNS>:9000`.
 
@@ -10,7 +10,7 @@ This guide covers the foundational configuration steps required immediately afte
 
 This section walks through configuring a standard ingestion data stream utilizing the unified **Input Setup Wizard** in **Graylog 7.1.2**. This process provisions the network listener (**Input**), logical filter rules (**Stream**), and physical storage configurations (**Index Set**) in a single pipeline.
 
----
+
 ### Step 1: Initiate Input Creation
 
 
@@ -21,7 +21,7 @@ This section walks through configuring a standard ingestion data stream utilizin
 
 
 
----
+
 
 ### Step 2: Configure Core Network Parameters
 
@@ -40,7 +40,7 @@ Define how the Graylog server instances will bind and listen for edge payload tr
 
 
 
----
+
 
 
 ### Step 3: Define Stream Routing Boundaries
@@ -56,7 +56,7 @@ The setup wizard will automatically transition to the **Routing** phase to keep 
 
 
 
----
+
 
 ### Step 4: Select an Operational Storage Template
 
@@ -72,7 +72,7 @@ Select an indexing duration template matching your organizational storage bounda
 
 
 
----
+
 
 
 ### Step 5: Finalize Index Set Details
@@ -89,7 +89,7 @@ Confirm backend search engine storage configurations and replica distributions.
 
 
 
----
+
 
 ### Step 6: Link Index and Complete Ingestion Setup
 Return to your workflow environment to tie the newly provisioned components together.
